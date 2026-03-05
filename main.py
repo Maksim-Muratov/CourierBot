@@ -1,28 +1,29 @@
 
 import os
-
 from dotenv import load_dotenv
-from telegram.ext import Updater, Filters, MessageHandler, CommandHandler
+from telegram.ext import Application, filters, MessageHandler, CommandHandler
 
 
-load_dotenv()
-token = os.getenv('TOKEN')
-updater = Updater(token)
-
-
-def answer(update, context):
-    chat = update.effective_chat
+async def answer(update, context):
     input = update.message.text
     output = input + ' + Адрес'   # Разработать настоящую обработку данных
-    context.bot.send_message(chat_id=chat.id, text=output)
+    await update.message.reply_text(output)
 
 
-def wake_up(update, context):
-    chat = update.effective_chat
-    context.bot.send_message(chat_id=chat.id, text='Бот активирован')
+async def start(update, context):
+    await update.message.reply_text('Отправьте Excel‑файл со списком отгрузок')
 
 
-updater.dispatcher.add_handler(CommandHandler('start', wake_up))
-updater.dispatcher.add_handler(MessageHandler(Filters.text, answer))
-updater.start_polling()
-updater.idle()   # Бот будет работать до тех пор, пока не нажмете Ctrl+C
+def main():
+    load_dotenv()
+    application = Application.builder().token(os.getenv('TOKEN')).build()
+
+    application.add_handler(CommandHandler('start', start))
+    application.add_handler(MessageHandler(filters.TEXT, answer))
+
+    print('Чтобы остановить бота, нажмите Ctrl+C')
+    application.run_polling()
+
+
+if __name__ == '__main__':
+    main()
