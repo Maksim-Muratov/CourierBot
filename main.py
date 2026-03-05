@@ -1,6 +1,5 @@
 
 import os
-
 from dotenv import load_dotenv
 from telegram.ext import Updater, Filters, MessageHandler, CommandHandler
 
@@ -17,12 +16,13 @@ def answer(update, context):
     context.bot.send_message(chat_id=chat.id, text=output)
 
 
-def wake_up(update, context):
-    chat = update.effective_chat
-    context.bot.send_message(chat_id=chat.id, text='Бот активирован')
+def start(update, context):
+    update.message.reply_text('Отправьте Excel‑файл со списком отгрузок')
 
 
-updater.dispatcher.add_handler(CommandHandler('start', wake_up))
+updater.dispatcher.add_handler(CommandHandler('start', start))
 updater.dispatcher.add_handler(MessageHandler(Filters.text, answer))
 updater.start_polling()
-updater.idle()   # Бот будет работать до тех пор, пока не нажмете Ctrl+C
+
+print('Чтобы остановить бота, нажмите Ctrl+C')
+updater.idle()
