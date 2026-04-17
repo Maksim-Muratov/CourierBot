@@ -59,9 +59,9 @@ PVZ_MAPPING = load_pvz_mapping()
 
 def handle_attachments(event, vk):
     user_id = event.user_id
-    attachment_type = event.attachments.get('attach1_type')
-    attachment_id = event.attachments.get('attach1')
 
+    # Проверяем тип вложения
+    attachment_type = event.attachments.get('attach1_type')
     if attachment_type != 'doc':
         vk.messages.send(
             user_id=user_id,
@@ -70,38 +70,24 @@ def handle_attachments(event, vk):
         )
         return
 
-    # Получаем access_key документа из message
+    # Получаем данные о файле
     try:
         message = vk.messages.getById(message_ids=event.message_id)
-        attachment = message['items'][0]['attachments'][0]
-        access_key = attachment['doc']['access_key']
-    except (KeyError, IndexError) as e:
-        print(f'[!!!] Ошибка при получении access_key: {e}')
-        vk.messages.send(
-            user_id=user_id,
-            message='Не удалось получить ключ доступа к документу. \n'
-            'Проверьте настройки приватности файла.',
-            random_id=get_random_id()
-        )
-        return
-
-    # Получаем документ
-    try:
-        full_doc_id = f'{attachment_id}_{access_key}'
-        doc = vk.docs.getById(docs=full_doc_id)[0]
-        file_url = doc['url']
-        filename = doc['title']
+        file = message['items'][0]['attachments'][0]['doc']
+        file_url = file['url']
+        filename = file['title']
+        file_extension = file['ext']
     except Exception as e:
-        print(f'[!!!] Ошибка при получении документа: {e}')
+        print(f'[!!!] Ошибка при получении данных о файле: {e}')
         vk.messages.send(
             user_id=user_id,
-            message='Документ не найден или недоступен.',
+            message='Не удалось получить данные о файле',
             random_id=get_random_id()
         )
         return
 
     # Проверяем расширение файла
-    if not filename.lower().endswith('.xlsx'):
+    if file_extension != 'xlsx':
         vk.messages.send(
             user_id=user_id,
             message='Пожалуйста, отправьте файл в формате .xlsx',
@@ -114,29 +100,33 @@ def handle_attachments(event, vk):
         response = requests.get(file_url, timeout=30)
         response.raise_for_status()
     except Exception as e:
+        print(f'[!!!] Ошибка скачивания файла: {e}')
         vk.messages.send(
             user_id=user_id,
-            message=f'Ошибка скачивания файла: {e}',
+            message='Не удалось скачать файл',
             random_id=get_random_id()
         )
         return
 
-    file_path = filename
-    with open(file_path, 'wb') as f:
+    # Сохраняем файл
+    with open(filename, 'wb') as f:
         f.write(response.content)
 
+    # Проверяем читаемость файла
     try:
-        pd.read_excel(file_path)
+        pd.read_excel(filename)
     except Exception as e:
+        print(f'[!!!] Ошибка чтения файла: {e}')
         vk.messages.send(
             user_id=user_id,
-            message=f'Файл повреждён или не является Excel: {e}',
+            message='Не удалось прочитать файл',
             random_id=get_random_id()
         )
-        os.remove(file_path)
+        os.remove(filename)
         return
 
-    user_data[user_id] = file_path
+    # Сохраняем данные о пользователе
+    user_data[user_id] = filename
 
     vk.messages.send(
         user_id=user_id,
@@ -161,7 +151,7 @@ def answer(event, vk):
     if PVZ_MAPPING is None:
         vk.messages.send(
             user_id=user_id,
-            message='Не удалось загрузить список адресов ПВЗ. Адреса не будут добавлены.',
+            message='Не удалось загрузить список адресов ПВЗ, адреса не будут добавлены',
             random_id=get_random_id()
         )
 
@@ -182,7 +172,7 @@ def answer(event, vk):
             elif PVZ_MAPPING and MAIN_PVZ_CODE_COLUMN not in filtered_df.columns:
                 vk.messages.send(
                     user_id=user_id,
-                    message=f'Не могу добавить адреса: не нахожу в этом файле столбец "{MAIN_PVZ_CODE_COLUMN}".',
+                    message=f'Не могу добавить адреса: не нахожу в этом файле столбец "{MAIN_PVZ_CODE_COLUMN}"',
                     random_id=get_random_id()
                 )
 
