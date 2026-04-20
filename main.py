@@ -47,7 +47,8 @@ def load_pvz_mapping():
     try:
         df_ref = pd.read_excel(PVZ_REFERENCE_FILE, sheet_name=PVZ_SHEET_NAME)
         df_ref = df_ref[[PVZ_CODE_COLUMN, PVZ_ADDRESS_COLUMN]].dropna()
-        mapping = dict(zip(df_ref[PVZ_CODE_COLUMN], df_ref[PVZ_ADDRESS_COLUMN]))
+        mapping = dict(zip(df_ref[PVZ_CODE_COLUMN],
+                           df_ref[PVZ_ADDRESS_COLUMN]))
         return mapping
     except Exception as e:
         print(f'[!!!] Ошибка загрузки списка адресов ПВЗ": {e}')
@@ -138,6 +139,7 @@ def handle_attachments(event, vk):
 def answer(event, vk):
     user_id = event.user_id
 
+    # Если пользователь ещё не скидывал файл отгрузок
     if user_id not in user_data:
         vk.messages.send(
             user_id=user_id,
@@ -146,19 +148,23 @@ def answer(event, vk):
         )
         return
 
-    filename = user_data[user_id]
-    entered_name = event.text.strip()
     if PVZ_MAPPING is None:
+        print('[!!!] Внимание: Не удалось сформировать список адресов')
         vk.messages.send(
             user_id=user_id,
-            message='Не удалось загрузить список адресов ПВЗ, адреса не будут добавлены',
+            message=('Не удалось загрузить список адресов ПВЗ, '
+                     'адреса не будут добавлены'),
             random_id=get_random_id()
         )
 
+    # Формируем данные для ответа
     try:
+        filename = user_data[user_id]
+        entered_name = event.text.strip()
         shipment_df = pd.read_excel(filename)
-        filtered_df = shipment_df[shipment_df[COURIER_FIO_COLUMN] == entered_name].copy()
-
+        mask = shipment_df[COURIER_FIO_COLUMN] == entered_name
+        filtered_df = shipment_df[mask].copy()
+        output_filename = f'Отгрузки {entered_name}.xlsx'
         if filtered_df.empty:
             vk.messages.send(
                 user_id=user_id,
@@ -166,17 +172,26 @@ def answer(event, vk):
                 random_id=get_random_id()
             )
         else:
-            if PVZ_MAPPING and MAIN_PVZ_CODE_COLUMN in filtered_df.columns:
-                filtered_df[NEW_ADDRESS_COLUMN] = filtered_df[MAIN_PVZ_CODE_COLUMN].map(PVZ_MAPPING)
-                filtered_df[NEW_ADDRESS_COLUMN] = filtered_df[NEW_ADDRESS_COLUMN].fillna('[Адрес не найден]')
-            elif PVZ_MAPPING and MAIN_PVZ_CODE_COLUMN not in filtered_df.columns:
-                vk.messages.send(
-                    user_id=user_id,
-                    message=f'Не могу добавить адреса: не нахожу в этом файле столбец "{MAIN_PVZ_CODE_COLUMN}"',
-                    random_id=get_random_id()
-                )
-
-            output_filename = f'Отгрузки {entered_name}.xlsx'
+            if PVZ_MAPPING:
+                if MAIN_PVZ_CODE_COLUMN not in filtered_df.columns:
+                    print('[!!!] Внимание: Не найден столбец '
+                          f'"{MAIN_PVZ_CODE_COLUMN}" с номерами ПВЗ. '
+                          'Возможно, поменялась конфигурация '
+                          'Excel‑файла со списком отгрузок')
+                    vk.messages.send(
+                        user_id=user_id,
+                        message=('Не могу добавить адреса: Возможно, '
+                                 'поменялась конфигурация Excel‑файла '
+                                 'со списком отгрузок'),
+                        random_id=get_random_id()
+                    )
+                # Добавляем адреса
+                else:
+                    filtered_df[NEW_ADDRESS_COLUMN] = (
+                        filtered_df[MAIN_PVZ_CODE_COLUMN]
+                        .map(PVZ_MAPPING)
+                        .fillna('[Адрес не найден]')
+                    )
             filtered_df.to_excel(output_filename, index=False)
 
             # Получаем URL для загрузки
