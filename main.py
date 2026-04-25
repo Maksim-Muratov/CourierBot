@@ -164,7 +164,6 @@ def answer(event, vk):
         shipment_df = pd.read_excel(filename)
         mask = shipment_df[COURIER_FIO_COLUMN] == entered_name
         filtered_df = shipment_df[mask].copy()
-        output_filename = f'Отгрузки {entered_name}.xlsx'
         if filtered_df.empty:
             vk.messages.send(
                 user_id=user_id,
@@ -190,45 +189,28 @@ def answer(event, vk):
                     filtered_df[NEW_ADDRESS_COLUMN] = (
                         filtered_df[MAIN_PVZ_CODE_COLUMN]
                         .map(PVZ_MAPPING)
-                        .fillna('[Адрес не найден]')
+                        .fillna('Адрес не найден')
                     )
-            filtered_df.to_excel(output_filename, index=False)
 
-            # Получаем URL для загрузки
-            upload_server = vk.docs.getMessagesUploadServer(
-                type='doc',
-                peer_id=user_id
-            )
-            upload_url = upload_server['upload_url']
-
-            # Загружаем файл на полученный URL
-            with open(output_filename, 'rb') as f:
-                files = {'file': (output_filename, f)}
-                response = requests.post(upload_url, files=files)
-                if response.status_code != 200:
-                    raise Exception(
-                        f'HTTP ошибка {response.status_code}: {response.text}'
-                    )
-                upload_response = response.json()
-
-            if 'file' not in upload_response:
-                error_msg = upload_response.get(
-                    'error',
-                    'Отсутствует ключ "file" в ответе сервера'
-                )
-                raise Exception(f'Ошибка загрузки файла: {error_msg}')
-
-            # Сохраняем документ в сообществе
-            saved_doc = vk.docs.save(
-                file=upload_response['file'],
-                title=output_filename
-            )['doc']
-            attachment = f'doc{saved_doc["owner_id"]}_{saved_doc["id"]}'
+            # Формируем отгрузки в текстовый формат
+            lines = []
+            for _, row in filtered_df.iterrows():
+                cells = row['Ячейки']
+                target = row['Получатели']
+                address = row['Адрес ПВЗ']
+                if len(address) > 40:
+                    # Обрезаем адрес до 40 последних символов
+                    address = f'[ ...{address[-40:]} ]'
+                else:
+                    address = f'[ {address} ]'
+                lines.append(f'{cells}\n{target}\n{address}\n')
+            message_text = (f'Готово! Отгрузки для {entered_name} '
+                            'отфильтрованы!\n\n'
+                            + '\n'.join(lines))
 
             vk.messages.send(
                 user_id=user_id,
-                message=f'Готово! Отгрузки для {entered_name} отфильтрованы!',
-                attachment=attachment,
+                message=message_text,
                 random_id=get_random_id()
             )
 
@@ -243,8 +225,6 @@ def answer(event, vk):
         if user_id in user_data:
             del user_data[user_id]
         # Очистка временных файлов
-        if 'output_filename' in locals() and os.path.exists(output_filename):
-            os.remove(output_filename)
         if os.path.exists(filename):
             os.remove(filename)
 
