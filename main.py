@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import pandas as pd
 import vk_api
 from vk_api.longpoll import VkLongPoll, VkEventType
+from vk_api.keyboard import VkKeyboard, VkKeyboardColor
 
 # Максимальное допустимое значение для random_id в VK API
 MAX_RANDOM_ID = 2**63 - 1
@@ -27,6 +28,10 @@ NEW_ADDRESS_COLUMN = 'Адрес ПВЗ'   # (Новая) Адреса ПВЗ
 
 # Словарь file_path текущих файлов по user_id
 user_data = {}
+# Словарь ФИО пользователей по user_id
+user_fio = {}
+# Множество пользователей, от которых ожидаем новое ФИО
+waiting_fio = set()
 
 
 def get_random_id():
@@ -129,15 +134,52 @@ def handle_attachments(event, vk):
     # Сохраняем данные о пользователе
     user_data[user_id] = filename
 
-    vk.messages.send(
-        user_id=user_id,
-        message='Теперь отправьте своё ФИО, как в файле',
-        random_id=get_random_id()
-    )
+    if user_id in user_fio:
+        answer(event, vk)
+    # Запросим ФИО у новых пользователей
+    else:
+        waiting_fio.add(user_id)
+        vk.messages.send(
+            user_id=user_id,
+            message=(
+                'Файл принят, теперь отправьте своё ФИО (Как в файле). '
+                'Сохраним его на будущее, чтобы больше не спрашивать'
+            ),
+            random_id=get_random_id()
+        )
 
 
 def answer(event, vk):
     user_id = event.user_id
+    text = event.text.strip()
+
+    # Команда "Изменить ФИО"
+    if text.lower() == 'изменить фио':
+        waiting_fio.add(user_id)
+        vk.messages.send(
+            user_id=user_id,
+            message='Отправьте новое ФИО (Как в файле)',
+            random_id=get_random_id()
+        )
+        return
+    
+    # Записываем новое ФИО
+    if user_id in waiting_fio:
+        # Если есть старое ФИО, удаляем
+        if user_id in user_fio:
+            del user_fio[user_id]
+        user_fio[user_id] = text
+        waiting_fio.remove(user_id)
+        vk.messages.send(
+            user_id=user_id,
+            message=f'Новое ФИО "{text}" сохранено',
+            random_id=get_random_id()
+        )
+        # Если мы запрашивали ФИО после получения документа
+        if user_id in user_data:
+            answer(event, vk)
+        else:
+            return
 
     # Если пользователь ещё не скидывал файл отгрузок
     if user_id not in user_data:
@@ -160,7 +202,7 @@ def answer(event, vk):
     # Формируем данные для ответа
     try:
         filename = user_data[user_id]
-        entered_name = event.text.strip()
+        entered_name = user_fio[user_id]
         shipment_df = pd.read_excel(filename)
         mask = shipment_df[COURIER_FIO_COLUMN] == entered_name
         filtered_df = shipment_df[mask].copy()
@@ -204,8 +246,8 @@ def answer(event, vk):
                 else:
                     address = f'[ {address} ]'
                 lines.append(f'{cells}\n{target}\n{address}\n')
-            message_text = (f'Готово! Отгрузки для {entered_name} '
-                            'отфильтрованы!\n\n'
+            message_text = (f'Курьер:\n{entered_name}\n\n'
+                            + f'{filename}\n\n'
                             + '\n'.join(lines))
 
             vk.messages.send(
@@ -236,12 +278,15 @@ def main():
 
     print('[i] Чтобы остановить бота, нажмите Ctrl+C')
 
-    for event in VkLongPoll(vk_session).listen():
-        if event.type == VkEventType.MESSAGE_NEW and event.to_me:
-            if event.attachments:
-                handle_attachments(event, vk)
-            else:
-                answer(event, vk)
+    try:
+        for event in VkLongPoll(vk_session).listen():
+            if event.type == VkEventType.MESSAGE_NEW and event.to_me:
+                if event.attachments:
+                    handle_attachments(event, vk)
+                else:
+                    answer(event, vk)
+    except KeyboardInterrupt:
+        print('[i] Бот успешно остановлен')
 
 
 if __name__ == '__main__':
