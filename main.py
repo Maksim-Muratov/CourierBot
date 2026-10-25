@@ -13,7 +13,7 @@ MAX_RANDOM_ID = 2**63 - 1
 
 # Файл "Список адресов ПВЗ":
 # Полное название актуального файла в корне проекта
-PVZ_REFERENCE_FILE = 'Список адресов ПВЗ от 08.02.2026.xlsx'
+PVZ_REFERENCE_FILE = 'Список адресов ПВЗ от 16.xlsx'
 # Имя нужного "листа" (Указаны на нижней панели Excel)
 PVZ_SHEET_NAME = 'Отчет слоя ПВЗ'
 # Названия столбцов
@@ -178,6 +178,7 @@ def answer(event, vk):
         # Если мы запрашивали ФИО после получения документа
         if user_id in user_data:
             answer(event, vk)
+            return
         else:
             return
 
