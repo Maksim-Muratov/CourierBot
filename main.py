@@ -201,6 +201,7 @@ def answer(event, vk):
         )
 
     # Формируем данные для ответа
+    filename = None
     try:
         filename = user_data[user_id]
         entered_name = user_fio[user_id]
@@ -213,6 +214,7 @@ def answer(event, vk):
                 message=f'В файле не нашлось строчек "{entered_name}"',
                 random_id=get_random_id()
             )
+            return
         else:
             if PVZ_MAPPING:
                 if MAIN_PVZ_CODE_COLUMN not in filtered_df.columns:
@@ -227,6 +229,7 @@ def answer(event, vk):
                                  'со списком отгрузок'),
                         random_id=get_random_id()
                     )
+                    # Тогда продолжаем без адресов
                 # Добавляем адреса
                 else:
                     filtered_df[NEW_ADDRESS_COLUMN] = (
@@ -234,6 +237,8 @@ def answer(event, vk):
                         .map(PVZ_MAPPING)
                         .fillna('Адрес не найден')
                     )
+            else:
+                filtered_df[NEW_ADDRESS_COLUMN] = 'Адрес не найден'
 
             # Формируем отгрузки в текстовый формат
             lines = []
