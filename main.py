@@ -1,5 +1,6 @@
 import os
 import random
+import re
 import requests
 from dotenv import load_dotenv
 
@@ -61,6 +62,16 @@ def load_pvz_mapping():
 
 
 PVZ_MAPPING = load_pvz_mapping()
+
+
+def cells_sort_key(value):
+    """
+    Преобразует номер ячейки "МК-21-08" в ключ сортировки (21, 8).
+    """
+    numbers = [int(n) for n in re.findall(r'\d+', str(value))]
+    if not numbers:
+        return (float('inf'),)
+    return tuple(numbers)
 
 
 def handle_attachments(event, vk):
@@ -239,6 +250,14 @@ def answer(event, vk):
                     )
             else:
                 filtered_df[NEW_ADDRESS_COLUMN] = 'Адрес не найден'
+
+            # Сортируем отгрузки по номеру ячейки
+            filtered_df = (
+                filtered_df
+                .assign(_sort_key=filtered_df['Ячейки'].map(cells_sort_key))
+                .sort_values(by='_sort_key')
+                .drop(columns='_sort_key')
+            )
 
             # Формируем отгрузки в текстовый формат
             lines = []
